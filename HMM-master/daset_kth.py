@@ -122,14 +122,16 @@ def preprocess_dataset(directory, sequences_file="00sequences.txt"):
 
 
 def combine_sequences(instances, labels):
+    max_length = max(len(seq) for seq in instances)
     combined_sequences = []
     for i, seq in enumerate(instances):
         if len(seq) > 0:
-            combined_seq = np.concatenate(seq, axis=0)
-            combined_sequences.append(combined_seq)
+            padded_seq = np.pad(seq, ((0, max_length - len(seq)), (0, 0), (0, 0)), mode='constant')
+            combined_sequences.append(padded_seq)
         else:
             print(f"No frames found for action {i}")
     return combined_sequences
+
 
 
 if __name__ == "__main__":
