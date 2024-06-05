@@ -55,8 +55,9 @@ def parse_sequence_file(sequence_file_path):
 
 def preprocess_dataset(directory, sequences_file="00sequences.txt"):
     print("Preprocessing dataset")
-    instances = []
+    instances = [[] for _ in range(len(CATEGORY_INDEX))]  # Initialize empty lists for each action
     labels = []
+
     frames_idx = parse_sequence_file(os.path.join(directory, sequences_file))
 
     for filename, frame_ranges in frames_idx.items():
@@ -71,10 +72,11 @@ def preprocess_dataset(directory, sequences_file="00sequences.txt"):
 
         # Open the video file
         cap = cv2.VideoCapture(filepath)
-        frames = []
 
         for frame_range in frame_ranges:
             start, end = frame_range
+            frames = []  # Initialize frames list for each video
+
             for i in range(start - 1, end):
                 cap.set(cv2.CAP_PROP_POS_FRAMES, i)
                 ret, frame = cap.read()
@@ -86,17 +88,19 @@ def preprocess_dataset(directory, sequences_file="00sequences.txt"):
                 gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
                 frames.append(gray_frame)
 
+            if len(frames) > 0:
+                # Normalize frames
+                frames = np.array(frames, dtype=np.float32) / 255.0
+                instances[CATEGORY_INDEX[category]].append(frames)
+                labels.append(CATEGORY_INDEX[category])
+                print(f"Added {len(frames)} frames for file: {filename}")
+
         cap.release()
 
-        if len(frames) > 0:
-            # Normalize frames
-            frames = np.array(frames, dtype=np.float32) / 255.0
-            instances.append(frames)
-            labels.append(CATEGORY_INDEX[category])
-            print(f"Added {len(frames)} frames for file: {filename}")
-
     # Convert instances and labels to numpy arrays
-    instances = np.array(instances)
+    for i in range(len(instances)):
+        instances[i] = np.array(instances[i])
+
     labels = np.array(labels, dtype=np.uint8)
 
     print("Completed preprocessing dataset")
@@ -104,12 +108,15 @@ def preprocess_dataset(directory, sequences_file="00sequences.txt"):
 
 
 def combine_sequences(instances, labels):
-    combined_sequences = [[] for _ in range(len(CATEGORY_INDEX))]
-    for instance, label in zip(instances, labels):
-        combined_sequences[label].append(instance)
-    for i in range(len(combined_sequences)):
-        combined_sequences[i] = np.concatenate(combined_sequences[i], axis=0)
+    combined_sequences = []
+    for i, seq in enumerate(instances):
+        if len(seq) > 0:
+            combined_seq = np.concatenate(seq, axis=0)
+            combined_sequences.append(combined_seq)
+        else:
+            print(f"No frames found for action {i}")
     return combined_sequences
+
 
 
 if __name__ == "__main__":
