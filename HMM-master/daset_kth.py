@@ -18,9 +18,11 @@ CATEGORY_INDEX = {
 
 class KTHDataset(Dataset):
     def __init__(self, directory, dataset="train", frame_interval=5):
+        print(f"Initializing dataset: {dataset}")
         self.instances, self.labels = self.read_dataset(directory, dataset, frame_interval)
         self.instances = torch.from_numpy(self.instances)
         self.labels = torch.from_numpy(self.labels)
+        print(f"Dataset {dataset} initialized with {len(self.instances)} instances")
 
     def __len__(self):
         return self.instances.shape[0]
@@ -33,15 +35,18 @@ class KTHDataset(Dataset):
         return sample
 
     def read_dataset(self, directory, dataset="train", frame_interval=5):
+        print(f"Reading dataset: {dataset}")
         instances = []
         labels = []
 
         for category in CATEGORY_INDEX.keys():
+            print(f"Processing category: {category}")
             folder_path = os.path.join(directory, category)
             filenames = sorted(os.listdir(folder_path))
 
             for filename in filenames:
                 filepath = os.path.join(folder_path, filename)
+                print(f"Processing file: {filename}")
 
                 # Open the video file
                 cap = cv2.VideoCapture(filepath)
@@ -64,6 +69,7 @@ class KTHDataset(Dataset):
                 if len(frames) > 0:
                     instances.append(np.array(frames, dtype=np.float32))
                     labels.append(CATEGORY_INDEX[category])
+                    print(f"Added {len(frames)} frames for file: {filename}")
 
         instances = np.array(instances, dtype=np.float32)
         labels = np.array(labels, dtype=np.uint8)
@@ -75,12 +81,14 @@ class KTHDataset(Dataset):
         instances = scaler.fit_transform(instances)
         instances = instances.reshape(instances_shape)
 
+        print(f"Completed reading dataset: {dataset}")
         return instances, labels
 
 
 def save_preprocessed_data(directory, frame_interval=5):
     datasets = ["train", "dev", "test"]
     for dataset in datasets:
+        print(f"Saving preprocessed data for dataset: {dataset}")
         kth_dataset = KTHDataset(directory, dataset, frame_interval)
         save_path = os.path.join("data", f"{dataset}_preprocessed.p")
         with open(save_path, "wb") as f:
@@ -88,6 +96,7 @@ def save_preprocessed_data(directory, frame_interval=5):
                 "instances": kth_dataset.instances,
                 "labels": kth_dataset.labels
             }, f)
+        print(f"Saved preprocessed data for dataset: {dataset} to {save_path}")
 
 
 if __name__ == "__main__":
