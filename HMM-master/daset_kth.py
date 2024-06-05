@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import torch
 import re
-from torch.utils.data import Dataset, TensorDataset
 
 CATEGORY_INDEX = {
     "boxing": 0,
@@ -54,90 +53,67 @@ def parse_sequence_file(sequence_file_path):
     return frames_idx
 
 
-class KTHDataset(Dataset):
-    def __init__(self, directory, dataset="train", sequences_file="00sequences.txt"):
-        print(f"Initializing dataset: {dataset}")
-        self.instances, self.labels = self.read_dataset(directory, dataset, sequences_file)
-        self.dataset = TensorDataset(*self.instances)  # Change here
-        self.labels = torch.from_numpy(self.labels)
-        print(f"Dataset {dataset} initialized with {len(self.instances)} instances")
+def preprocess_dataset(directory, sequences_file="00sequences.txt"):
+    print("Preprocessing dataset")
+    instances = []
+    labels = []
+    frames_idx = parse_sequence_file(os.path.join(directory, sequences_file))
 
-    def __len__(self):
-        return len(self.dataset)
+    for filename, frame_ranges in frames_idx.items():
+        category = filename.split('_')[1]
+        if category not in CATEGORY_INDEX:
+            continue
 
-    def __getitem__(self, idx):
-        instance = self.dataset[idx]  # Change here
-        sample = {
-            "instance": instance,
-            "label": self.labels[idx]
-        }
-        return sample
+        folder_path = os.path.join(directory, category)
+        filepath = os.path.join(folder_path, f"{filename}_uncomp.avi")
 
-    def read_dataset(self, directory, dataset="train", sequences_file="00sequences.txt"):
-        print(f"Reading dataset: {dataset}")
-        instances = []
-        labels = []
-        frames_idx = parse_sequence_file(os.path.join(directory, sequences_file))
+        print(f"Processing file: {filename}")
 
-        for filename, frame_ranges in frames_idx.items():
-            category = filename.split('_')[1]
-            if category not in CATEGORY_INDEX:
-                continue
+        # Open the video file
+        cap = cv2.VideoCapture(filepath)
+        frames = []
 
-            folder_path = os.path.join(directory, category)
-            filepath = os.path.join(folder_path, f"{filename}_uncomp.avi")
+        for frame_range in frame_ranges:
+            start, end = frame_range
+            for i in range(start - 1, end):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                # Resize frame to 80x60
+                resized_frame = cv2.resize(frame, (80, 60))
+                # Convert to grayscale
+                gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
+                frames.append(gray_frame)
 
-            print(f"Processing file: {filename}")
+        cap.release()
 
-            # Open the video file
-            cap = cv2.VideoCapture(filepath)
-            frames = []
+        if len(frames) > 0:
+            # Normalize frames
+            frames = np.array(frames, dtype=np.float32) / 255.0
+            instances.append(frames)
+            labels.append(CATEGORY_INDEX[category])
+            print(f"Added {len(frames)} frames for file: {filename}")
 
-            for frame_range in frame_ranges:
-                start, end = frame_range
-                for i in range(start - 1, end):
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    # Resize frame to 80x60
-                    resized_frame = cv2.resize(frame, (80, 60))
-                    # Convert to grayscale
-                    gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
-                    frames.append(gray_frame)
+    # Convert instances and labels to numpy arrays
+    instances = np.array(instances)
+    labels = np.array(labels, dtype=np.uint8)
 
-            cap.release()
-
-            if len(frames) > 0:
-                # Normalize frames
-                frames = np.array(frames, dtype=np.float32) / 255.0
-                instances.append(torch.from_numpy(frames))  # Change here
-                labels.append(CATEGORY_INDEX[category])
-                print(f"Added {len(frames)} frames for file: {filename}")
-
-        # Convert instances and labels to numpy arrays
-        labels = np.array(labels, dtype=np.uint8)
-
-        print(f"Completed reading dataset: {dataset}")
-        return instances, labels
-
-
-def save_preprocessed_data(directory, sequences_file="00sequences.txt"):
-    datasets = ["train", "dev", "test"]
-    for dataset in datasets:
-        print(f"Saving preprocessed data for dataset: {dataset}")
-        kth_dataset = KTHDataset(directory, dataset, sequences_file)
-        save_path = os.path.join("data", f"{dataset}_preprocessed.p")
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path, "wb") as f:
-            pickle.dump({
-                "instances": kth_dataset.instances,
-                "labels": kth_dataset.labels
-            }, f)
-        print(f"Saved preprocessed data for dataset: {dataset} to {save_path}")
+    print("Completed preprocessing dataset")
+    return instances, labels
 
 
 if __name__ == "__main__":
     directory = "KTH"
     sequences_file = "00sequences.txt"
-    save_preprocessed_data(directory, sequences_file)
+    instances, labels = preprocess_dataset(directory, sequences_file)
+
+    # Save preprocessed data
+    save_path = os.path.join("data", "preprocessed_dataset.p")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "wb") as f:
+        pickle.dump({
+            "instances": instances,
+            "labels": labels
+        }, f)
+    print(f"Preprocessed data saved to: {save_path}")
