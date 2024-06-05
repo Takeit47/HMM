@@ -133,7 +133,6 @@ def combine_sequences(instances, labels):
     return combined_sequences
 
 
-
 if __name__ == "__main__":
     directory = "KTH"
     sequences_file = "00sequences.txt"
