@@ -3,8 +3,7 @@ import pickle
 import cv2
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import StandardScaler
+from torch.utils.data import Dataset
 
 CATEGORY_INDEX = {
     "boxing": 0,
@@ -17,9 +16,9 @@ CATEGORY_INDEX = {
 
 
 class KTHDataset(Dataset):
-    def __init__(self, directory, dataset="train", frame_interval=5):
+    def __init__(self, directory, dataset="train", sequences_file="00sequences.txt"):
         print(f"Initializing dataset: {dataset}")
-        self.instances, self.labels = self.read_dataset(directory, dataset, frame_interval)
+        self.instances, self.labels = self.read_dataset(directory, dataset, sequences_file)
         self.instances = torch.from_numpy(self.instances)
         self.labels = torch.from_numpy(self.labels)
         print(f"Dataset {dataset} initialized with {len(self.instances)} instances")
@@ -34,63 +33,70 @@ class KTHDataset(Dataset):
         }
         return sample
 
-    def read_dataset(self, directory, dataset="train", frame_interval=5):
+
+    def read_dataset(self, directory, dataset="train", sequences_file="00sequences.txt"):
         print(f"Reading dataset: {dataset}")
         instances = []
         labels = []
 
-        for category in CATEGORY_INDEX.keys():
-            print(f"Processing category: {category}")
+        with open(os.path.join(directory, sequences_file), 'r') as file:
+            lines = file.readlines()
+
+        for line in lines:
+            line_split = line.strip().split()
+            video_name = line_split[0]
+            frame_ranges = line_split[2:]
+
+            category = video_name.split('_')[1]
+            if category not in CATEGORY_INDEX:
+                continue
+
             folder_path = os.path.join(directory, category)
-            filenames = sorted(os.listdir(folder_path))
+            filepath = os.path.join(folder_path, f"{video_name}_uncomp.avi")
 
-            for filename in filenames:
-                filepath = os.path.join(folder_path, filename)
-                print(f"Processing file: {filename}")
+            print(f"Processing file: {video_name}")
 
-                # Open the video file
-                cap = cv2.VideoCapture(filepath)
-                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                frames = []
+            # Open the video file
+            cap = cv2.VideoCapture(filepath)
+            frames = []
 
-                for i in range(0, frame_count, frame_interval):
+            for frame_range in frame_ranges:
+                start, end = map(int, frame_range.split('-'))
+                for i in range(start - 1, end):
                     cap.set(cv2.CAP_PROP_POS_FRAMES, i)
                     ret, frame = cap.read()
                     if not ret:
                         break
+                    # Resize frame to 80x60
+                    resized_frame = cv2.resize(frame, (80, 60))
                     # Convert to grayscale
-                    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    # Resize frame
-                    resized_frame = cv2.resize(gray_frame, (80, 60))
-                    frames.append(resized_frame)
+                    gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
+                    frames.append(gray_frame)
 
-                cap.release()
+            cap.release()
 
-                if len(frames) > 0:
-                    instances.append(np.array(frames, dtype=np.float32))
-                    labels.append(CATEGORY_INDEX[category])
-                    print(f"Added {len(frames)} frames for file: {filename}")
+            if len(frames) > 0:
+                # Normalize frames
+                frames = np.array(frames, dtype=np.float32) / 255.0
+                instances.append(frames)
+                labels.append(CATEGORY_INDEX[category])
+                print(f"Added {len(frames)} frames for file: {video_name}")
 
-        instances = np.array(instances, dtype=np.float32)
+        # Convert instances and labels to numpy arrays
+        instances = np.array(instances, dtype=object)  # Use dtype=object for variable-length sequences
         labels = np.array(labels, dtype=np.uint8)
-
-        # Standardize the instances
-        scaler = StandardScaler()
-        instances_shape = instances.shape
-        instances = instances.reshape(instances_shape[0], -1)
-        instances = scaler.fit_transform(instances)
-        instances = instances.reshape(instances_shape)
 
         print(f"Completed reading dataset: {dataset}")
         return instances, labels
 
 
-def save_preprocessed_data(directory, frame_interval=5):
+def save_preprocessed_data(directory, sequences_file="00sequences.txt"):
     datasets = ["train", "dev", "test"]
     for dataset in datasets:
         print(f"Saving preprocessed data for dataset: {dataset}")
-        kth_dataset = KTHDataset(directory, dataset, frame_interval)
+        kth_dataset = KTHDataset(directory, dataset, sequences_file)
         save_path = os.path.join("data", f"{dataset}_preprocessed.p")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "wb") as f:
             pickle.dump({
                 "instances": kth_dataset.instances,
@@ -101,4 +107,5 @@ def save_preprocessed_data(directory, frame_interval=5):
 
 if __name__ == "__main__":
     directory = "KTH"
-    save_preprocessed_data(directory)
+    sequences_file = "00sequences.txt"
+    save_preprocessed_data(directory, sequences_file)
