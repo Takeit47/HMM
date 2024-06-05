@@ -17,10 +17,10 @@ class HMModel:
     def __init__(self, n_components=n_components, n_iter=n_iter):
         self.n_components = n_components
         self.n_iter = n_iter
-        self.model = hmm.GaussianHMM(n_components=n_components, covariance_type='full', n_iter=n_iter)
+        self.model = hmm.GaussianHMM(n_components=n_components, covariance_type="diag", n_iter=n_iter, min_covar=1e-3)
 
     def Laplacian(self):
-
+        pass
 
 
     def train(self, observation, observation_length):

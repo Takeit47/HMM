@@ -14,7 +14,7 @@ def load_figure_dataset(pth, n_clusters=3):
     train_clusters, test_clusters = [], []
 
     for file in os.listdir(pth):
-        print(file)
+        # print(file)
         labels.append(file.split('.')[0])
         file_path = os.path.join(pth, file)
         tree = ET.parse(file_path)
@@ -48,7 +48,7 @@ def load_figure_dataset(pth, n_clusters=3):
         normalized_train = scaler.fit_transform(sorted_train)
         normalized_test = scaler.transform(sorted_test)
 
-        kmeans = KMeans(n_clusters=n_clusters)
+        kmeans = KMeans(n_clusters=n_clusters, n_init='auto')
         # print(np.concatenate((normalized_train, normalized_test)))
         kmeans.fit(np.concatenate((normalized_train, normalized_test)))
         train_labels = kmeans.labels_[:np.sum(train_lens)]
