@@ -3,7 +3,8 @@ import pickle
 import cv2
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+import re
+from torch.utils.data import Dataset, TensorDataset
 
 CATEGORY_INDEX = {
     "boxing": 0,
@@ -15,53 +16,85 @@ CATEGORY_INDEX = {
 }
 
 
+def parse_sequence_file(sequence_file_path):
+    print("Parsing sequence file:", sequence_file_path)
+    frames_idx = {}
+
+    with open(sequence_file_path, 'r') as content_file:
+        content = content_file.read()
+
+    # Replace tab and newline characters with space, then split file's content
+    # into strings.
+    content = re.sub("[\t\n]", " ", content).split()
+
+    # Current video that we are parsing.
+    current_filename = ""
+
+    for s in content:
+        if s == "frames":
+            # Ignore this token.
+            continue
+        elif s.find("-") >= 0:
+            # This is the token we are looking for. e.g. 1-95.
+            if s[-1] == ',':
+                # Remove comma.
+                s = s[:-1]
+
+            # Split into 2 numbers => [1, 95]
+            idx = s.split("-")
+
+            # Add to dictionary.
+            if current_filename not in frames_idx:
+                frames_idx[current_filename] = []
+            frames_idx[current_filename].append((int(idx[0]), int(idx[1])))
+        else:
+            # Parse next file.
+            current_filename = s + "_uncomp.avi"
+
+    return frames_idx
+
+
 class KTHDataset(Dataset):
     def __init__(self, directory, dataset="train", sequences_file="00sequences.txt"):
         print(f"Initializing dataset: {dataset}")
         self.instances, self.labels = self.read_dataset(directory, dataset, sequences_file)
-        self.instances = torch.from_numpy(self.instances)
+        self.dataset = TensorDataset(*self.instances)  # Change here
         self.labels = torch.from_numpy(self.labels)
         print(f"Dataset {dataset} initialized with {len(self.instances)} instances")
 
     def __len__(self):
-        return self.instances.shape[0]
+        return len(self.dataset)
 
     def __getitem__(self, idx):
+        instance = self.dataset[idx]  # Change here
         sample = {
-            "instance": self.instances[idx],
+            "instance": instance,
             "label": self.labels[idx]
         }
         return sample
-
 
     def read_dataset(self, directory, dataset="train", sequences_file="00sequences.txt"):
         print(f"Reading dataset: {dataset}")
         instances = []
         labels = []
+        frames_idx = parse_sequence_file(os.path.join(directory, sequences_file))
 
-        with open(os.path.join(directory, sequences_file), 'r') as file:
-            lines = file.readlines()
-
-        for line in lines:
-            line_split = line.strip().split()
-            video_name = line_split[0]
-            frame_ranges = line_split[2:]
-
-            category = video_name.split('_')[1]
+        for filename, frame_ranges in frames_idx.items():
+            category = filename.split('_')[1]
             if category not in CATEGORY_INDEX:
                 continue
 
             folder_path = os.path.join(directory, category)
-            filepath = os.path.join(folder_path, f"{video_name}_uncomp.avi")
+            filepath = os.path.join(folder_path, f"{filename}_uncomp.avi")
 
-            print(f"Processing file: {video_name}")
+            print(f"Processing file: {filename}")
 
             # Open the video file
             cap = cv2.VideoCapture(filepath)
             frames = []
 
             for frame_range in frame_ranges:
-                start, end = map(int, frame_range.split('-'))
+                start, end = frame_range
                 for i in range(start - 1, end):
                     cap.set(cv2.CAP_PROP_POS_FRAMES, i)
                     ret, frame = cap.read()
@@ -78,12 +111,11 @@ class KTHDataset(Dataset):
             if len(frames) > 0:
                 # Normalize frames
                 frames = np.array(frames, dtype=np.float32) / 255.0
-                instances.append(frames)
+                instances.append(torch.from_numpy(frames))  # Change here
                 labels.append(CATEGORY_INDEX[category])
-                print(f"Added {len(frames)} frames for file: {video_name}")
+                print(f"Added {len(frames)} frames for file: {filename}")
 
         # Convert instances and labels to numpy arrays
-        instances = np.array(instances, dtype=object)  # Use dtype=object for variable-length sequences
         labels = np.array(labels, dtype=np.uint8)
 
         print(f"Completed reading dataset: {dataset}")
