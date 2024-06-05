@@ -103,17 +103,31 @@ def preprocess_dataset(directory, sequences_file="00sequences.txt"):
     return instances, labels
 
 
+def combine_sequences(instances, labels):
+    combined_sequences = [[] for _ in range(len(CATEGORY_INDEX))]
+    for instance, label in zip(instances, labels):
+        combined_sequences[label].append(instance)
+    for i in range(len(combined_sequences)):
+        combined_sequences[i] = np.concatenate(combined_sequences[i], axis=0)
+    return combined_sequences
+
+
 if __name__ == "__main__":
     directory = "KTH"
     sequences_file = "00sequences.txt"
     instances, labels = preprocess_dataset(directory, sequences_file)
+    combined_sequences = combine_sequences(instances, labels)
+
+    # Print the structure of combined sequences
+    for i, seq in enumerate(combined_sequences):
+        print(f"Action {i}: {seq.shape}")
 
     # Save preprocessed data
     save_path = os.path.join("data", "preprocessed_dataset.p")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "wb") as f:
         pickle.dump({
-            "instances": instances,
-            "labels": labels
+            "instances": combined_sequences,
+            "labels": list(range(len(CATEGORY_INDEX)))  # Dummy labels since instances are already grouped by action
         }, f)
     print(f"Preprocessed data saved to: {save_path}")
