@@ -66,12 +66,26 @@ def preprocess_dataset(directory, sequences_file="00sequences.txt"):
             continue
 
         folder_path = os.path.join(directory, category)
-        filepath = os.path.join(folder_path, f"{filename}_uncomp.avi")
 
-        print(f"Processing file: {filename}")
+        # Check if the action folder exists
+        if not os.path.exists(folder_path):
+            print(f"Action folder {category} not found.")
+            continue
+
+        filepath = os.path.join(folder_path, f"{filename}")
+
+        # Check if the video file exists
+        if not os.path.exists(filepath):
+            print(f"Video file {filename}.avi not found.")
+            continue
 
         # Open the video file
         cap = cv2.VideoCapture(filepath)
+
+        # Check if the video file was opened successfully
+        if not cap.isOpened():
+            print(f"Could not open video file: {filename}.avi")
+            continue
 
         for frame_range in frame_ranges:
             start, end = frame_range
@@ -116,7 +130,6 @@ def combine_sequences(instances, labels):
         else:
             print(f"No frames found for action {i}")
     return combined_sequences
-
 
 
 if __name__ == "__main__":
