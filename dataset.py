@@ -70,6 +70,6 @@ if __name__ == '__main__':
     # Usage
     file_path = 'data_figure/'
     (datasets, kmeans_data, labels, lens), _ = load_figure_dataset(file_path, n_clusters=3)
-    print(datasets[0].shape, lens[0])
+    print(datasets[0], lens[0])
     print(kmeans_data[0].shape)
 
