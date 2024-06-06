@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from func import predict, train
 
 
-def plot_confusion_matrix(true_labels, pred_labels, class_names):
+def plot_confusion_matrix(models, test_data, test_lens, class_names):
     """
     绘制混淆矩阵
 
@@ -15,6 +15,16 @@ def plot_confusion_matrix(true_labels, pred_labels, class_names):
     :param pred_labels: 预测标签列表
     :param class_names: 类别名称列表
     """
+    pred_labels = []
+    true_labels = []
+    for idx, (samples, lens) in enumerate(zip(test_data, test_lens)):
+        start = 0
+        for sample_len in lens:
+            pred, scores = predict(models, samples[start:start + sample_len])
+            # print(pred, idx)
+            start += sample_len
+            pred_labels.append(pred)
+            true_labels.append(idx)
     cm = confusion_matrix(true_labels, pred_labels, labels=range(len(class_names)))
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
     disp.plot(cmap=plt.cm.Blues)
@@ -114,20 +124,21 @@ def plot_accuracy_k_n_component(k_li, n_li):
         acc_lst = []
 
         (observations, kmeans_data, labels, lens), (test_data, test_kmeans, test_labels, test_lens) = (
-            load_figure_dataset('data_figure', n_clusters=k))
-        # print(lens)
+            load_figure_dataset('data_figure', n_clusters=k, dtw=True))
+        # print(test_lens)
         for n in n_li:
-            if n > k:
+            if n >= k:
                 acc_lst.append(0)
                 continue
 
-            models = [HMModel(n_components=n, n_iter=2000) for _ in ['a', 'e', 'i', 'o', 'u']]
+            models = [HMModel(n_components=n, n_iter=200) for _ in ['a', 'e', 'i', 'o', 'u']]
             # print(kmeans_data, lens)
             train(models, kmeans_data, labels, lens)
 
-            for idx, (samples, test_len) in enumerate(zip(test_data, test_lens)):
+            for idx, (samples, test_len) in enumerate(zip(test_kmeans, test_lens)):
                 start = 0
                 for sample_len in test_len:
+                    # print(sample_len)
                     pred, scores = predict(models, samples[start:start + sample_len])
                     start += sample_len
                     pred_labels.append(pred)
@@ -136,7 +147,7 @@ def plot_accuracy_k_n_component(k_li, n_li):
             acc = np.sum([true_label == pred_label for (true_label, pred_label) in zip(true_labels, pred_labels)]) / len(true_labels)
             acc_lst.append(acc)
             print(f"k={k};n={n} acc: {acc}")
-        print(n_li, acc_lst)
+        # print(n_li, acc_lst)
         axs[i].plot(n_li, acc_lst)
         axs[i].set_xlabel('n_components')
         axs[i].set_ylabel('Accuracy')
@@ -147,7 +158,7 @@ def plot_accuracy_k_n_component(k_li, n_li):
 
 
 if __name__ == '__main__':
-    range_k = list(range(5, 26))
+    range_k = list(range(5, 11))
     range_component = list(range(2, 13))
     plot_accuracy_k_n_component(range_k, range_component)
     
