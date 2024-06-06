@@ -2,6 +2,7 @@ import os
 import pickle
 import cv2
 import numpy as np
+import re
 
 # 定义动作类别与其索引的映射关系
 CATEGORY_INDEX = {
@@ -63,7 +64,6 @@ def extract_state_features(flow):
 def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=12):
     print("预处理数据集")
     datasets = {split_type: {category: [] for category in CATEGORY_INDEX.keys()} for split_type in dataset_split.keys()}
-    labels = {split_type: {category: [] for category in CATEGORY_INDEX.keys()} for split_type in dataset_split.keys()}
 
     for split_type, persons in dataset_split.items():
         for person in persons:
@@ -108,18 +108,16 @@ def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=12):
                             prev_frame = gray_frame
 
                     if state_sequence:
-                        state_sequence = np.array(state_sequence).flatten()  # 将特征序列展平为1维
                         datasets[split_type][category].append(state_sequence)
-                        labels[split_type][category].append(CATEGORY_INDEX[category])
                         print(f"为文件 {filename} 添加了 {len(state_sequence)} 个特征向量")
 
                     cap.release()
 
-    return datasets, labels
+    return datasets
 
 
 # 将预处理的数据保存到文件
-def save_data(datasets, labels, directory="data"):
+def save_data(datasets, directory="data"):
     os.makedirs(directory, exist_ok=True)  # 如果目录不存在，则创建它
     for split_type, category_data in datasets.items():
         split_dir = os.path.join(directory, split_type)
@@ -128,22 +126,22 @@ def save_data(datasets, labels, directory="data"):
             if not instances:
                 print(f"警告：类别 {category} 在 {split_type} 中没有数据，将跳过保存。")
                 continue
-            merged_instances = np.concatenate(instances, axis=0)
-            label_array = np.array([CATEGORY_INDEX[category]] * len(merged_instances), dtype=np.uint8)
+            # 展平所有特征向量并拼接
+            flattened_instances = [instance for video in instances for instance in video]
+            merged_instances = np.array(flattened_instances)
+            labels = np.full((merged_instances.shape[0],), CATEGORY_INDEX[category], dtype=np.uint8)
             save_path = os.path.join(split_dir, f"preprocessed_dataset_{CATEGORY_INDEX[category]}.p")
             with open(save_path, "wb") as f:
-                pickle.dump({"instances": merged_instances, "labels": label_array}, f)
-            print(f"{split_type} - 类别 {CATEGORY_INDEX[category]} 实例形状: {merged_instances.shape}")
-            print(f"{split_type} - 类别 {CATEGORY_INDEX[category]} 标签形状: {label_array.shape}")
+                pickle.dump({"instances": merged_instances, "labels": labels}, f)
+            print(f"{split_type} - 类别 {category} 实例形状: {merged_instances.shape}")
+            print(f"{split_type} - 类别 {category} 标签形状: {labels.shape}")
             print(f"{split_type} 数据已保存到: {save_path}\n")
 
-
-# 主程序入口
 
 # 主程序入口
 if __name__ == "__main__":
     directory = "data_kth/"  # 设置数据集的根目录
     sequences_file = "00sequences.txt"  # 序列文件名
     frames_idx = parse_sequence_file(os.path.join(directory, sequences_file))  # 解析序列文件
-    datasets, labels = preprocess_dataset(directory, frames_idx, dataset_split)  # 预处理数据集
-    save_data(datasets, labels)  # 保存预处理后的数据
+    datasets = preprocess_dataset(directory, frames_idx, dataset_split)  # 预处理数据集
+    save_data(datasets)  # 保存预处理后的数据

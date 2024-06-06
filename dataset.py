@@ -152,7 +152,7 @@ if __name__ == '__main__':
     # Usage
     file_path = 'data_figure/'
     (datasets, kmeans_data, labels, lens), _ = load_letter_dataset(file_path, n_clusters=16, dtw=True)
-    print(datasets[0], lens[0])
+    print(kmeans_data, lens)
     print(kmeans_data[0].shape)
     for _ in kmeans_data[0]:
         print(_)
