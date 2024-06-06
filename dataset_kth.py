@@ -18,8 +18,7 @@ CATEGORY_INDEX = {
 dataset_split = {
     "Training": ["person11", "person12", "person13", "person14", "person15", "person16", "person17", "person18"],
     "Validation": ["person19", "person20", "person21", "person23", "person24", "person25", "person01", "person04"],
-    "Test": ["person22", "person02", "person03", "person05", "person06", "person07", "person08", "person09",
-             "person10"]
+    "Test": ["person22", "person02", "person03", "person05", "person06", "person07", "person08", "person09", "person10"]
 }
 
 
@@ -64,6 +63,8 @@ def extract_state_features(flow):
 def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=12):
     print("预处理数据集")
     datasets = {split_type: {category: [] for category in CATEGORY_INDEX.keys()} for split_type in dataset_split.keys()}
+    feature_lengths = {split_type: {category: [] for category in CATEGORY_INDEX.keys()} for split_type in
+                       dataset_split.keys()}
 
     for split_type, persons in dataset_split.items():
         for person in persons:
@@ -102,22 +103,24 @@ def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=12):
                             gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)  # 转换为灰度图像
                             if prev_frame is not None:
                                 # 计算光流
-                                flow = cv2.calcOpticalFlowFarneback(prev_frame, gray_frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                                flow = cv2.calcOpticalFlowFarneback(prev_frame, gray_frame, None, 0.5, 3, 15, 3, 5, 1.2,
+                                                                    0)
                                 state_features = extract_state_features(flow)  # 提取状态特征
                                 state_sequence.append(state_features)
                             prev_frame = gray_frame
 
                     if state_sequence:
                         datasets[split_type][category].append(state_sequence)
+                        feature_lengths[split_type][category].append(len(state_sequence))
                         print(f"为文件 {filename} 添加了 {len(state_sequence)} 个特征向量")
 
                     cap.release()
 
-    return datasets
+    return datasets, feature_lengths
 
 
 # 将预处理的数据保存到文件
-def save_data(datasets, directory="data"):
+def save_data(datasets, feature_lengths, directory="data"):
     os.makedirs(directory, exist_ok=True)  # 如果目录不存在，则创建它
     for split_type, category_data in datasets.items():
         split_dir = os.path.join(directory, split_type)
@@ -137,11 +140,53 @@ def save_data(datasets, directory="data"):
             print(f"{split_type} - 类别 {category} 标签形状: {labels.shape}")
             print(f"{split_type} 数据已保存到: {save_path}\n")
 
+            # 保存特征长度信息
+            lengths_save_path = os.path.join(split_dir, f"feature_lengths_{CATEGORY_INDEX[category]}.p")
+            with open(lengths_save_path, "wb") as f:
+                pickle.dump(feature_lengths[split_type][category], f)
+            print(f"{split_type} - 类别 {category} 特征长度: {feature_lengths[split_type][category]}")
+            print(f"{split_type} 特征长度数据已保存到: {lengths_save_path}\n")
+
+
+def load_data(directory="data"):
+    datasets = {"Training": {}, "Validation": {}, "Test": {}}
+    for split_type in datasets.keys():
+        split_dir = os.path.join(directory, split_type)
+        if not os.path.exists(split_dir):
+            continue
+        for filename in os.listdir(split_dir):
+            if filename.endswith(".p"):
+                category = int(filename.split('_')[-1].split('.')[0])
+                with open(os.path.join(split_dir, filename), "rb") as f:
+                    data = pickle.load(f)
+                    datasets[split_type][category] = data
+    return datasets
+
+def load_feature_lengths(directory="data"):
+    feature_lengths = {"Training": {}, "Validation": {}, "Test": {}}
+    for split_type in feature_lengths.keys():
+        split_dir = os.path.join(directory, split_type)
+        if not os.path.exists(split_dir):
+            continue
+        for filename in os.listdir(split_dir):
+            if filename.startswith("feature_lengths_") and filename.endswith(".p"):
+                category = int(filename.split('_')[-1].split('.')[0])
+                with open(os.path.join(split_dir, filename), "rb") as f:
+                    data = pickle.load(f)
+                    feature_lengths[split_type][category] = data
+    return feature_lengths
+
 
 # 主程序入口
 if __name__ == "__main__":
     directory = "data_kth/"  # 设置数据集的根目录
     sequences_file = "00sequences.txt"  # 序列文件名
     frames_idx = parse_sequence_file(os.path.join(directory, sequences_file))  # 解析序列文件
-    datasets = preprocess_dataset(directory, frames_idx, dataset_split)  # 预处理数据集
-    save_data(datasets)  # 保存预处理后的数据
+    datasets, feature_lengths = preprocess_dataset(directory, frames_idx, dataset_split)  # 预处理数据集
+    save_data(datasets, feature_lengths)  # 保存预处理后的数据
+
+    # 打印特征长度信息
+    for split_type, category_data in feature_lengths.items():
+        print(f"{split_type} 特征长度信息：")
+        for category, lengths in category_data.items():
+            print(f"类别 {category}: {lengths}")

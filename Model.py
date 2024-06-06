@@ -32,38 +32,72 @@ class HMModel:
         return score
 
 
+class GaussianHMM:
+    def __init__(self, n_components=n_components, n_iter=n_iter):
+        self.n_components = n_components
+        self.n_iter = n_iter
+        self.model = hmm.GaussianHMM(n_components=n_components, n_iter=n_iter, covariance_type='full')
+
+    def Laplacian(self):
+        pass
+
+    def train(self, observation, observation_length):
+        self.model.fit(observation, observation_length)
+
+    def predict(self, observation):
+        # print(observation)
+        score = self.model.score(observation)
+        return score
+
+
 if __name__ == '__main__':
-    model_A = hmm.GaussianHMM(n_components=n_components, covariance_type='full', n_iter=n_iter)
-    model_E = hmm.GaussianHMM(n_components=n_components, covariance_type='full', n_iter=n_iter)
+    from dataset_kth import load_data, load_feature_lengths, CATEGORY_INDEX
+    from func import *
 
-    import dataset
-    # 生成示例数据
-    # 这里我们使用简单的整数观测值，但你可以根据需要使用自己的数据
-    src_observations, observations, labels, lens = dataset.load_figure_dataset('data_figure/', n_clusters=32)
-
-    observation_a = np.reshape(observations[0], (-1, 1))
-    observation_e = np.reshape(observations[1], (-1, 1))
-    print(list(value for value in observation_a))
-    len_a = lens[0]
-    len_e = lens[1]
-    print(observation_a.shape, observation_e.shape, len_a, len_e)
-    # 训练模型
-    model_A.fit(observation_a, lengths=len_a)
-    print("model_A train finished.")
-    model_E.fit(observation_e, lengths=len_e)
-    print("model_E train finished.")
-    # # 预测观测序列的隐状态
-    # logprob, state_sequence = model.decode(observation, algorithm="viterbi")
-    # print("最可能的状态序列:", state_sequence)
-    sample = np.reshape(observation_e[0:87], (-1, 1))
-    # print(sample)
-    # 计算观测序列的概率
-    score_a = model_A.score(sample)
-    score_e = model_E.score(sample)
-    print("观测序列的概率:", np.exp(score_a), np.exp(score_e))
-
-    # # 输出模型的参数
-    # print("初始概率分布:", model.startprob_)
-    # print("转移概率矩阵:", model.transmat_)
-    # print("均值:", model.means_)
-    # print("协方差:", model.covars_)
+    datasets = load_data()
+    datasets_lengths = load_feature_lengths()
+    # # 示例输出，打印某个类别的实例形状
+    # print(datasets["Training"][0]["instances"].shape)
+    # print(datasets_lengths["Training"][0])
+    train_data, test_data = ([datasets['Training'][i]["instances"] for i in range(6)],
+                             [datasets['Test'][i]['instances'] for i in range(6)])
+    train_lens, test_lens = datasets_lengths['Training'].values(), datasets_lengths['Test'].values()
+    # print(train_lens)
+    models = [GaussianHMM(6, 2000) for i in range(6)]
+    train(models, train_data, CATEGORY_INDEX.keys(), train_lens)
+    pred_labels = []
+    true_labels = []
+    acc = 0
+    for idx, (samples, test_len) in enumerate(zip(test_data, test_lens)):
+        start = 0
+        for sample_len in test_len:
+            # print(sample_len)
+            pred, scores = predict(models, samples[start:start + sample_len])
+            print(pred, idx)
+            start += sample_len
+            pred_labels.append(pred)
+            true_labels.append(idx)
+            if pred == idx:
+                acc += 1
+    # acc = np.sum(true_labels == pred_labels) / len(true_labels)
+    print(f"acc: {acc/len(true_labels)}")
+    # models = [GaussianHMM(2, 200) for i in range(6)]
+    # for split_type, category_data in dataset_kth.items():
+    #     if split_type == 'Training':
+    #         datas = [each_class['instances'] for each_class in category_data]
+    #         lens = [each_class['lens'] for each_class in category_data]
+    #         train(models, category, CATEGORY_INDEX.keys(), lengths)
+    #     if split_type == 'Test':
+    #         pred_labels = []
+    #         true_labels = []
+    #         category, lengths = category_data.items()
+    #         for idx, (samples, test_len) in enumerate(zip(category, lengths)):
+    #             start = 0
+    #             for sample_len in test_len:
+    #                 # print(sample_len)
+    #                 pred, scores = predict(models, samples[start:start + sample_len])
+    #                 start += sample_len
+    #                 pred_labels.append(pred)
+    #                 true_labels.append(idx)
+    #         acc = np.sum(true_labels == pred_labels) / len(true_labels)
+    #         print(f"acc: {acc}")
