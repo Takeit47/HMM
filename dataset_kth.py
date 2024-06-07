@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 import re
 
+from matplotlib import pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
 # 定义动作类别与其索引的映射关系
 CATEGORY_INDEX = {
     "boxing": 0,
@@ -59,8 +63,44 @@ def extract_state_features(flow):
     return mean_mag, mean_ang
 
 
+def extract_state_features_hist(flow, num_bins=8, grid_size=(2, 2)):
+    h, w = flow.shape[:2]
+    mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+
+    # 全局特征
+    mean_mag = np.mean(mag)
+    std_mag = np.std(mag)
+    max_mag = np.max(mag)
+    min_mag = np.min(mag)
+
+    mean_ang = np.mean(ang)
+    std_ang = np.std(ang)
+
+    # 方向直方图
+    hist, _ = np.histogram(ang, bins=num_bins, range=(0, 2 * np.pi), density=True)
+
+    # 局部特征
+    grid_h, grid_w = h // grid_size[0], w // grid_size[1]
+    local_features = []
+
+    for i in range(0, h, grid_h):
+        for j in range(0, w, grid_w):
+            local_mag = mag[i:i + grid_h, j:j + grid_w]
+            local_ang = ang[i:i + grid_h, j:j + grid_w]
+            local_mean_mag = np.mean(local_mag)
+            local_mean_ang = np.mean(local_ang)
+            local_features.extend([local_mean_mag, local_mean_ang])
+
+    # 合并特征
+    features = [mean_mag, std_mag, max_mag, min_mag, mean_ang, std_ang]
+    features.extend(hist)
+    features.extend(local_features)
+    # print(np.array(features).shape)
+    return np.array(features)
+
+
 # 预处理数据集，包括读取视频、计算光流和提取特征
-def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=12):
+def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=4):
     print("预处理数据集")
     datasets = {split_type: {category: [] for category in CATEGORY_INDEX.keys()} for split_type in dataset_split.keys()}
     feature_lengths = {split_type: {category: [] for category in CATEGORY_INDEX.keys()} for split_type in
@@ -103,13 +143,13 @@ def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=12):
                             gray_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)  # 转换为灰度图像
                             if prev_frame is not None:
                                 # 计算光流
-                                flow = cv2.calcOpticalFlowFarneback(prev_frame, gray_frame, None, 0.5, 3, 15, 3, 5, 1.2,
-                                                                    0)
-                                state_features = extract_state_features(flow)  # 提取状态特征
+                                flow = cv2.calcOpticalFlowFarneback(prev_frame, gray_frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                                state_features = extract_state_features_hist(flow)  # 提取状态特征
                                 state_sequence.append(state_features)
                             prev_frame = gray_frame
 
                     if state_sequence:
+                        # state_sequence = extract_state_features_hist(np.array(state_sequence))
                         datasets[split_type][category].append(state_sequence)
                         feature_lengths[split_type][category].append(len(state_sequence))
                         print(f"为文件 {filename} 添加了 {len(state_sequence)} 个特征向量")

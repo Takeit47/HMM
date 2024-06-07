@@ -53,6 +53,7 @@ class GaussianHMM:
 if __name__ == '__main__':
     from dataset_kth import load_data, load_feature_lengths, CATEGORY_INDEX
     from func import *
+    from graphic import plot_confusion_matrix
 
     datasets = load_data()
     datasets_lengths = load_feature_lengths()
@@ -62,25 +63,37 @@ if __name__ == '__main__':
     train_data, test_data = ([datasets['Training'][i]["instances"] for i in range(6)],
                              [datasets['Test'][i]['instances'] for i in range(6)])
     train_lens, test_lens = datasets_lengths['Training'].values(), datasets_lengths['Test'].values()
+    # train_clusters, train_LENS = DTW(train_data, train_lens)
+    # test_clusters, test_LENS = DTW(test_data, test_lens)
+
     # print(train_lens)
-    models = [GaussianHMM(6, 2000) for i in range(6)]
-    train(models, train_data, CATEGORY_INDEX.keys(), train_lens)
-    pred_labels = []
-    true_labels = []
-    acc = 0
-    for idx, (samples, test_len) in enumerate(zip(test_data, test_lens)):
-        start = 0
-        for sample_len in test_len:
-            # print(sample_len)
-            pred, scores = predict(models, samples[start:start + sample_len])
-            print(pred, idx)
-            start += sample_len
-            pred_labels.append(pred)
-            true_labels.append(idx)
-            if pred == idx:
-                acc += 1
-    # acc = np.sum(true_labels == pred_labels) / len(true_labels)
-    print(f"acc: {acc/len(true_labels)}")
+    ave_acc = 0
+    for _ in range(10):
+        models = [GaussianHMM(2, 5000) for i in range(6)]
+        train(models, train_data, CATEGORY_INDEX.keys(), train_lens)
+        plot_confusion_matrix(models, test_data, test_lens, CATEGORY_INDEX.keys())
+        pred_labels = []
+        true_labels = []
+        acc = 0
+        for idx, (samples, test_len) in enumerate(zip(test_data, test_lens)):
+            start = 0
+            for sample_len in test_len:
+                # print(sample_len)
+                pred, scores = predict(models, samples[start:start + sample_len])
+                # print(pred, idx)
+                start += sample_len
+                pred_labels.append(pred)
+                true_labels.append(idx)
+                if pred == idx:
+                    acc += 1
+        # acc = np.sum(true_labels == pred_labels) / len(true_labels)
+        print(f"acc: {acc/len(true_labels)}")
+        ave_acc += acc/len(true_labels)
+
+
+    print(ave_acc/10)
+
+
     # models = [GaussianHMM(2, 200) for i in range(6)]
     # for split_type, category_data in dataset_kth.items():
     #     if split_type == 'Training':
