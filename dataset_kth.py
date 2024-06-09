@@ -56,48 +56,59 @@ def parse_sequence_file(sequence_file_path):
 
 
 # 从光流计算运动的强度和方向特征
-def extract_state_features(flow):
-    mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-    mean_mag = np.mean(mag)  # 计算运动强度的平均值
-    mean_ang = np.mean(ang)  # 计算运动方向的平均值
-    return mean_mag, mean_ang
 
+def extract_state_features(flow, num_bins=4, grid_size=(2, 2)):
+    """
+    从光流场中提取运动特征，包括全局特征、方向直方图和局部特征。
 
-def extract_state_features_hist(flow, num_bins=8, grid_size=(2, 2)):
+    参数:
+    flow (numpy.ndarray): 光流场，形状为 (height, width, 2)，包含光流的x和y分量。
+    num_bins (int): 方向直方图的bin数量，默认值为4。
+    grid_size (tuple): 图像划分的网格大小，默认值为 (2, 2)。
+
+    返回:
+    numpy.ndarray: 提取的特征向量。
+    """
+
+    # 获取光流场的高和宽
     h, w = flow.shape[:2]
+
+    # 将光流从笛卡尔坐标转换为极坐标，得到运动强度 (magnitude) 和方向 (angle)
     mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
 
-    # 全局特征
-    mean_mag = np.mean(mag)
-    std_mag = np.std(mag)
-    max_mag = np.max(mag)
-    min_mag = np.min(mag)
+    # 计算全局运动强度和方向的统计特征
+    mean_mag = np.mean(mag)  # 运动强度的平均值
+    std_mag = np.std(mag)  # 运动强度的标准差
+    mean_ang = np.mean(ang)  # 运动方向的平均值
+    std_ang = np.std(ang)  # 运动方向的标准差
 
-    mean_ang = np.mean(ang)
-    std_ang = np.std(ang)
-
-    # 方向直方图
+    # 计算运动方向的直方图，范围为 0 到 2*pi
     hist, _ = np.histogram(ang, bins=num_bins, range=(0, 2 * np.pi), density=True)
 
-    # 局部特征
+    # 将图像划分为若干子区域，并在每个子区域内计算局部特征
     grid_h, grid_w = h // grid_size[0], w // grid_size[1]
     local_features = []
 
     for i in range(0, h, grid_h):
         for j in range(0, w, grid_w):
+            # 提取子区域的光流强度和方向
             local_mag = mag[i:i + grid_h, j:j + grid_w]
             local_ang = ang[i:i + grid_h, j:j + grid_w]
+
+            # 计算子区域的运动强度和方向的平均值
             local_mean_mag = np.mean(local_mag)
             local_mean_ang = np.mean(local_ang)
+
+            # 将局部特征添加到列表中
             local_features.extend([local_mean_mag, local_mean_ang])
 
-    # 合并特征
-    features = [mean_mag, std_mag, max_mag, min_mag, mean_ang, std_ang]
+    # 合并全局特征、方向直方图和局部特征，形成最终的特征向量
+    features = [mean_mag, std_mag, mean_ang, std_ang]
     features.extend(hist)
     features.extend(local_features)
-    # print(np.array(features).shape)
-    return np.array(features)
 
+    # 返回特征向量
+    return np.array(features)
 
 # 预处理数据集，包括读取视频、计算光流和提取特征
 def preprocess_dataset(directory, frames_idx, dataset_split, skip_frames=4):
